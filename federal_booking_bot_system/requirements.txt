@@ -1,0 +1,8 @@
+aiogram
+
+requests
+
+selenium
+python-dotenv
+
+chromedriver-autoinstaller
