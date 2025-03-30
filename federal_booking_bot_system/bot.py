@@ -2,69 +2,69 @@
 import json
 import logging
 from datetime import datetime
-from aiogram import Bot, Dispatcher, types
-from aiogram.types import ParseMode
-from aiogram.utils import executor
 from dotenv import load_dotenv
+from aiogram import Bot, Dispatcher, types
+from aiogram.utils import executor
 
-# Load .env file
+# Load environment variables
 load_dotenv()
-
-# Get bot token from environment variable
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 # Initialize bot and dispatcher
-bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
+bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
 
-# Logging setup
+# Temporary in-memory user state
+user_steps = {}
+
+# Logging
 logging.basicConfig(level=logging.INFO)
 
-# Temp storage for user steps
-user_states = {}
-
-# Handle /start
+# Start command
 @dp.message_handler(commands=['start'])
 async def start(message: types.Message):
-    user_states[message.chat.id] = {'step': 1}
+    chat_id = message.chat.id
+    user_steps[chat_id] = {'step': 1}
     await message.answer("Welcome! Please enter the service type (e.g., Segurança Privada):")
 
-# Handle each step
-@dp.message_handler(lambda message: True)
-async def collect_data(message: types.Message):
-    user_id = message.chat.id
-    state = user_states.get(user_id, {})
+# Handle step-by-step input
+@dp.message_handler()
+async def handle_steps(message: types.Message):
+    chat_id = message.chat.id
+    text = message.text
+    step_data = user_steps.get(chat_id)
 
-    if not state:
+    if not step_data:
         await message.answer("Please type /start to begin.")
         return
 
-    step = state.get('step', 1)
+    step = step_data.get("step", 1)
 
     if step == 1:
-        state['service'] = message.text
-        state['step'] = 2
+        step_data["service"] = text
+        step_data["step"] = 2
         await message.answer("Please enter your request number:")
     elif step == 2:
-        state['code'] = message.text
-        state['step'] = 3
+        step_data["code"] = text
+        step_data["step"] = 3
         await message.answer("Please enter your date of birth (dd/mm/yyyy):")
     elif step == 3:
-        state['birthdate'] = message.text
-        state['step'] = 4
+        step_data["birthdate"] = text
+        step_data["step"] = 4
         await message.answer("Please enter the private invitation code:")
     elif step == 4:
-        if message.text != "1924":
+        if text.strip() != "1924":
             await message.answer("❌ Invalid invite code.")
-            user_states.pop(user_id, None)
+            user_steps.pop(chat_id, None)
             return
-        # Save data
+
+        # Save user data
         user_data = {
-            "chat_id": user_id,
+            "chat_id": chat_id,
             "name": message.from_user.full_name,
-            "service": state['service'],
-            "code": state['code'],
-            "birthdate": state['birthdate'],
+            "service": step_data["service"],
+            "code": step_data["code"],
+            "birthdate": step_data["birthdate"],
             "auto_book": True,
             "registered_at": datetime.now().strftime("%Y-%m-%d %H:%M")
         }
@@ -76,12 +76,13 @@ async def collect_data(message: types.Message):
             users = []
 
         users.append(user_data)
+
         with open("users.json", "w", encoding="utf-8") as f:
             json.dump(users, f, ensure_ascii=False, indent=2)
 
-        await message.answer("✅ Your data has been saved successfully. We will notify you when a slot is found.")
-        user_states.pop(user_id, None)
+        await message.answer("✅ Your data has been saved. We will notify you when an appointment is available.")
+        user_steps.pop(chat_id, None)
 
-# Run bot
-if __name__ == "__main__":
+# Run the bot
+if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
